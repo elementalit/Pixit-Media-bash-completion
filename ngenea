@@ -1,0 +1,223 @@
+# ngmigrate/ngrecall/ngreconcile/ngscan parameter-completion
+
+_debug ()
+{
+    MSG="$1"
+    LOGFILE="$2"
+    local i
+    {
+        echo $(date) $MSG size=${#COMP_WORDS[@]} COMP_CWORD=$COMP_CWORD ${COMP_WORDS[@]}
+        i=0
+        while (( i < ${#COMP_WORDS[@]} ));do
+            echo 1 "[$i]=${COMP_WORDS[i]}"
+            ((i++))
+        done
+        echo ====
+    } >> "$LOGFILE"
+}
+
+_debug2 ()
+{
+    MSG="$1"
+    LOGFILE="$2"
+    echo $(date) $MSG >> "$LOGFILE"
+}
+
+_expand ()
+{
+    local thisdir="$1"
+    local thiscur="$2"
+    local thislist=()
+
+    thislist=( $(cd "$thisdir"; compgen -f -o plusdirs -- ${thiscur}) )
+    local _ii=0
+    while (( _ii < ${#thislist[@]} ))
+    do
+        if [[ -d "$thisdir/${thislist[_ii]}" ]]; then
+            thislist[_ii]+=/
+        fi
+        _ii++
+    done
+
+}
+
+_comp_objects=()
+
+_ngmigrate ()
+{
+    local cur
+    # Pointer to current completion word.
+
+    COMPREPLY=()    # Array variable storing the possible completions.
+    cur=${COMP_WORDS[COMP_CWORD]}
+
+    # Generate the completion matches and load them into $COMPREPLY array.
+    case "$cur" in
+        -*)
+            # _debug "A-Branch 1." /tmp/comp.out
+            local words='-E -f -p -r -v -V\
+                --config-file      --default-stub-size  --endpoint \
+                --endpoint-exclude --filelist-format    --force-stub-size \
+                --lock-level       --log-format        --log-target \
+                --no-recursion-remote                   --overwrite-remote \
+                --premigrate      --recursion-local     --skip-check-hash \
+                --update-atime    --update-mtime        --x-cancel-bpearl-job\
+                --help --verbose --version \
+                '
+            if [[ $NGENEA_COMPLETION_ALL_OPTIONS =~ ^[yY][eE][sS]$ ]];then
+                # _debug "B-NGENEA_COMPLETION_ALL_OPTIONS=$NGENEA_COMPLETION_ALL_OPTIONS." /tmp/comp.out
+                words+=' --no-dmapi'
+            fi
+            
+            COMPREPLY=( $( compgen -W "$words" -- $cur ) )
+            ;;
+        *)
+            _debug "C-Branch 2." /tmp/comp.out
+            local _use_dir=.    # default to current directory
+            if [[ ${COMP_WORDS[COMP_CWORD-1]} =~ ^(--config-file)$ ]];then
+                [ $COMPLETION_CONFIG_DIR ] && _use_dir="$COMPLETION_CONFIG_DIR"
+                _debug2 "D-_use_dir=$_use_dir, COMPLETION_CONFIG_DIR=$COMPLETION_CONFIG_DIR" /tmp/comp.out
+                # COMPREPLY=( $(cd "$_use_dir"; compgen -f -o nospace -o filenames -- ${cur}) )
+                COMPREPLY=( $(cd "$_use_dir"; compgen -f -o plusdirs -- ${cur}) )
+            elif [[ ${COMP_WORDS[COMP_CWORD-1]} =~ ^(-v|--verbose)$ ]];then
+                COMPREPLY=( $(compgen -W '0 1 2 3' -- ${cur}) )
+            elif [[ ${COMP_WORDS[COMP_CWORD-1]} =~ ^(--lock-level)$ ]];then
+                COMPREPLY=( $(compgen -W 'partial implicit' -- ${cur}) )
+            elif [[ ${COMP_WORDS[COMP_CWORD-1]} =~ ^(--filelist-format)$ ]];then
+                COMPREPLY=( $(compgen -W 'LF NUL quoted' -- ${cur}) )
+            elif [[ ${COMP_WORDS[COMP_CWORD-1]} =~ ^(--log-format)$ ]];then
+                COMPREPLY=( $(compgen -W 'json' -- ${cur}) )
+            elif [[ ${COMP_WORDS[COMP_CWORD-1]} =~ ^(--log-target)$ ]];then
+                COMPREPLY=( $(compgen -W 'syslog' -- ${cur}) )
+            else
+                # [ $COMPLETION_GPFS_DIR ] && _use_dir="$COMPLETION_GPFS_DIR"
+                _debug2 "E-_use_dir=$_use_dir, COMPLETION_GPFS_DIR=$COMPLETION_GPFS_DIR" /tmp/comp.out
+                # COMPREPLY=( $(cd "$_use_dir"; compgen -f -o plusdirs -- ${cur}) )
+
+                [[ $COMPLETION_GPFS_DIR ]] && _use_dir="$COMPLETION_GPFS_DIR"
+                _debug2 "F-_use_dir=$_use_dir, COMPLETION_GPFS_DIR=$COMPLETION_GPFS_DIR" /tmp/comp.out
+
+                local _method=2
+                [[ ${COMP_WORDS[1]} =~ ^[12]$ ]] && _method=${COMP_WORDS[1]}
+                if [[ $_method == 1 ]];then
+                    # Method 1 - standard
+                    COMPREPLY=( $(cd "$_use_dir"; compgen -f -o plusdirs -- ${cur}) )
+
+                    # # COMPREPLY=( $(cd .; compgen -f -o nospace -o filenames -o plusdirs -- ${cur}) )
+                    _debug2 "H-compgen -f -o plusdirs -- ${cur}" /tmp/comp.out
+                    # COMPREPLY=( $(cd .; compgen -f -o plusdirs -- ${cur}) )
+                    _debug "method 1 -_use_dir=$_use_dir, COMPLETION_CONFIG_DIR=$COMPLETION_CONFIG_DIR" /tmp/comp.out
+                fi
+                if [[ $_method == 2 ]];then
+                    # Method 2 - separate object for files+dirs
+                    _comp_objects=( $(cd "$_use_dir"; compgen -f -o plusdirs -- ${cur}) )
+                    local _ii=0
+                    _debug2 "G1-_comp_objects=${#_comp_objects[@]}" /tmp/comp.out
+                    # _debug2 "G2-_comp_objects ${_comp_objects[@]}" /tmp/comp.out
+                    while (( _ii < ${#_comp_objects[@]} ));do
+                        # _debug2 "G2-_comp_objects[$_ii] ${_comp_objects[_ii]}" /tmp/comp.out
+                        if [[ -d "$_use_dir"/${_comp_objects[_ii]}" ]];then
+                            _debug2 "G3- _ii=$_ii  _comp_objects[$_ii] ${_comp_objects[_ii]}" /tmp/comp.out
+                            [[ "${_comp_objects[_ii]}" = */ ]] || _comp_objects[_ii]+=/
+                        fi
+                        # _debug2 "G2-_comp_objects[$_ii] ${_comp_objects[_ii]}" /tmp/comp.out
+                        (( _ii++ ))
+                    done
+                    COMPREPLY=( "${_comp_objects[@]}" )
+                    _debug "method 2 -_use_dir=$_use_dir, COMPLETION_CONFIG_DIR=$COMPLETION_CONFIG_DIR" /tmp/comp.out
+                fi
+            fi
+            ;;
+    esac
+    return 0
+}
+
+_ngrecall ()
+{
+    local cur
+    # Pointer to current completion word.
+
+    COMPREPLY=()    # Array variable storing the possible completions.
+    cur=${COMP_WORDS[COMP_CWORD]}
+
+    # Generate the completion matches and load them into $COMPREPLY array.
+    case "$cur" in
+        -*)
+            COMPREPLY=( $( compgen -W '-h -v -V\
+                            --config-file      --default-stub-size  --endpoint \
+                            --endpoint-exclude --filelist-format    --force-stub-size \
+                            --lock-level       --log-target         --no-dmapi \
+                            --no-recursion-remote                   --overwrite-remote \
+                            --premigrate      --recursion-local     --skip-check-hash \
+                            --update-atime    --update-mtime        --x-cancel-bpearl-job\
+                            --help --verbose --version \
+                            ' -- $cur ) )
+            ;;
+        *)
+            COMPREPLY=( $(compgen -f -o plusdirs -- ${cur}) )
+            ;;
+    esac
+    return 0
+}
+
+_ngreconcile ()
+{
+    local cur
+    # Pointer to current completion word.
+
+    COMPREPLY=()    # Array variable storing the possible completions.
+    cur=${COMP_WORDS[COMP_CWORD]}
+
+    # Generate the completion matches and load them into $COMPREPLY array.
+    case "$cur" in
+        -*)
+            COMPREPLY=( $( compgen -W '-h -v -V\
+                            --config-file      --default-stub-size  --endpoint \
+                            --endpoint-exclude --filelist-format    --force-stub-size \
+                            --lock-level       --log-target         --no-dmapi \
+                            --no-recursion-remote                   --overwrite-remote \
+                            --premigrate      --recursion-local     --skip-check-hash \
+                            --update-atime    --update-mtime        --x-cancel-bpearl-job\
+                            --help --verbose --version \
+                            ' -- $cur ) )
+            ;;
+        *)
+            COMPREPLY=( $(compgen -f -o plusdirs -- ${cur}) )
+            ;;
+    esac
+    return 0
+}
+
+_ngscan ()
+{
+    local cur
+    # Pointer to current completion word.
+
+    COMPREPLY=()    # Array variable storing the possible completions.
+    cur=${COMP_WORDS[COMP_CWORD]}
+
+    # Generate the completion matches and load them into $COMPREPLY array.
+    case "$cur" in
+        -*)
+            COMPREPLY=( $( compgen -W '-h -v -V\
+                            --config-file      --default-stub-size  --endpoint \
+                            --endpoint-exclude --filelist-format    --force-stub-size \
+                            --lock-level       --log-target         --no-dmapi \
+                            --no-recursion-remote                   --overwrite-remote \
+                            --premigrate      --recursion-local     --skip-check-hash \
+                            --update-atime    --update-mtime        --x-cancel-bpearl-job\
+                            --help --verbose --version \
+                            ' -- $cur ) )
+            ;;
+        *)
+            COMPREPLY=( $(compgen -f -o plusdirs -- ${cur}) )
+            ;;
+    esac
+    return 0
+}
+
+complete -F _ngmigrate -o filenames ngmigrate.sh
+complete -F _ngmigrate -o filenames ngmigrate
+complete -F _ngrecall -o filenames ngrecall
+complete -F _ngreconcile -o filenames ngreconcile
+complete -F _ngscan -o filenames ngscan
